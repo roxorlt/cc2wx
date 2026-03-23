@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "cc2wx": {
+      "command": "npx",
+      "args": ["tsx", "cc2wx.ts"]
+    }
+  }
+}

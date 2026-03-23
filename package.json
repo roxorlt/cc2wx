@@ -1,0 +1,29 @@
+{
+  "name": "cc2wx",
+  "version": "1.0.0",
+  "description": "Claude Code ↔ WeChat bridge via MCP Channel protocol",
+  "scripts": {
+    "postinstall": "cd node_modules/@pinixai/weixin-bot && npm install --no-save @types/node && npx tsc --project tsconfig.json",
+    "login": "node login.mjs",
+    "start": "node start.mjs",
+    "serve": "npx tsx cc2wx.ts"
+  },
+  "keywords": [
+    "claude-code",
+    "wechat",
+    "mcp",
+    "channel",
+    "ilink-bot"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@pinixai/weixin-bot": "^1.2.0",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
