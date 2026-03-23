@@ -49,7 +49,7 @@ cc2wx 是一个 MCP Channel Server，通过微信 [iLink Bot API](https://github
 ## 快速开始
 
 ```bash
-git clone https://github.com/anthropics/cc2wx.git  # 替换为实际仓库地址
+git clone https://github.com/roxorlt/cc2wx.git
 cd cc2wx
 npm install
 ```
@@ -180,7 +180,7 @@ sequenceDiagram
 ### Quick start
 
 ```bash
-git clone <repo-url> && cd cc2wx && npm install
+git clone https://github.com/roxorlt/cc2wx.git && cd cc2wx && npm install
 npm run login   # scan QR → auto-launches Claude Code
 npm start       # subsequent runs (reuses saved credentials)
 ```
