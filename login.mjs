@@ -8,6 +8,7 @@
  */
 
 import { mkdir, writeFile, chmod } from 'node:fs/promises'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
@@ -18,8 +19,30 @@ const CRED_DIR = path.join(os.homedir(), '.weixin-bot')
 const CRED_PATH = path.join(CRED_DIR, 'credentials.json')
 const POLL_INTERVAL = 2000
 
+function ensureMcpJson() {
+  // 确保 cwd 下有 .mcp.json 指向本包的 cc2wx.ts
+  const pkgDir = path.dirname(new URL(import.meta.url).pathname)
+  const cc2wxTs = path.join(pkgDir, 'cc2wx.ts')
+  const mcpPath = path.join(process.cwd(), '.mcp.json')
+  const entry = { command: 'npx', args: ['tsx', cc2wxTs] }
+
+  if (existsSync(mcpPath)) {
+    try {
+      const existing = JSON.parse(readFileSync(mcpPath, 'utf8'))
+      existing.mcpServers = existing.mcpServers || {}
+      existing.mcpServers.cc2wx = entry
+      writeFileSync(mcpPath, JSON.stringify(existing, null, 2) + '\n')
+    } catch {
+      writeFileSync(mcpPath, JSON.stringify({ mcpServers: { cc2wx: entry } }, null, 2) + '\n')
+    }
+  } else {
+    writeFileSync(mcpPath, JSON.stringify({ mcpServers: { cc2wx: entry } }, null, 2) + '\n')
+  }
+}
+
 function launchClaude() {
   console.log('\n正在启动 Claude Code...\n')
+  ensureMcpJson()
   const claudeArgs = [
     '--dangerously-load-development-channels', 'server:cc2wx',
     '--dangerously-skip-permissions',
@@ -28,10 +51,7 @@ function launchClaude() {
   // macOS: caffeinate -i 阻止空闲休眠；其他平台直接运行
   const cmd = process.platform === 'darwin' ? 'caffeinate' : 'claude'
   const args = process.platform === 'darwin' ? ['-i', 'claude', ...claudeArgs] : claudeArgs
-  const child = spawn(cmd, args, {
-    stdio: 'inherit',
-    cwd: path.dirname(new URL(import.meta.url).pathname),
-  })
+  const child = spawn(cmd, args, { stdio: 'inherit' })
   child.on('exit', (code) => process.exit(code ?? 0))
 }
 
