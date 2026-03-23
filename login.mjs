@@ -90,7 +90,7 @@ while (true) {
     if (status.status === 'scaned') {
       console.log('已扫码，请在微信中确认授权...')
     } else if (status.status === 'expired') {
-      console.log('二维码已过期，请重新运行 npm run login')
+      console.log('二维码已过期，请重新运行: npx cc2wx login')
       process.exit(1)
     }
     lastStatus = status.status

@@ -23,6 +23,19 @@ const PKG_DIR = __dirname
 
 const CRED_PATH = path.join(os.homedir(), '.weixin-bot', 'credentials.json')
 
+const BANNER = [
+  '',
+  '\x1b[36m\x1b[1m   ██████╗ ██████╗██████╗ ██╗    ██╗██╗  ██╗\x1b[0m',
+  '\x1b[36m\x1b[1m  ██╔════╝██╔════╝╚════██╗██║    ██║╚██╗██╔╝\x1b[0m',
+  '\x1b[36m\x1b[1m  ██║     ██║      █████╔╝██║ █╗ ██║ ╚███╔╝ \x1b[0m',
+  '\x1b[36m\x1b[1m  ██║     ██║     ██╔═══╝ ██║███╗██║ ██╔██╗ \x1b[0m',
+  '\x1b[36m\x1b[1m  ╚██████╗╚██████╗███████╗╚███╔███╔╝██╔╝ ██╗\x1b[0m',
+  '\x1b[36m\x1b[1m   ╚═════╝ ╚═════╝╚══════╝ ╚══╝╚══╝ ╚═╝  ╚═╝\x1b[0m',
+  '\x1b[2m      Claude Code ↔ WeChat Bridge\x1b[0m',
+  '\x1b[2m              by \x1b[0m\x1b[33mroxorlt\x1b[0m',
+  '',
+].join('\n')
+
 const HELP = `
 cc2wx - Claude Code <-> WeChat bridge
 
@@ -85,6 +98,7 @@ function hasCredentials() {
 // --- Commands ---
 
 function runLogin() {
+  console.log(BANNER)
   // Fork login.mjs from the package directory
   const loginScript = path.join(PKG_DIR, 'login.mjs')
   const child = spawn(process.execPath, [loginScript], {
@@ -103,6 +117,10 @@ function runStart() {
   }
 
   ensureMcpJson()
+
+  console.log(BANNER)
+  console.log('  Send a message to your WeChat to talk to Claude.')
+  console.log('  Press Ctrl+C to stop.\n')
 
   const claudeArgs = [
     '--dangerously-load-development-channels', 'server:cc2wx',
@@ -128,8 +146,36 @@ function runServe() {
   child.on('exit', (code) => process.exit(code ?? 0))
 }
 
+// --- Pre-flight checks ---
+import { execSync } from 'node:child_process'
+
+function preflight() {
+  // Check Node version
+  const [major] = process.versions.node.split('.').map(Number)
+  if (major < 18) {
+    console.error(`❌ Node.js >= 18 required (current: ${process.version})`)
+    console.error('   Install: https://nodejs.org/')
+    process.exit(1)
+  }
+
+  // Check Claude Code CLI
+  try {
+    execSync('claude --version', { stdio: 'ignore' })
+  } catch {
+    console.error('❌ Claude Code CLI not found')
+    console.error('   Install: npm install -g @anthropic-ai/claude-code')
+    console.error('   Docs: https://docs.anthropic.com/en/docs/claude-code')
+    process.exit(1)
+  }
+}
+
 // --- Main ---
 const command = process.argv[2]
+
+// Run preflight for commands that need Claude
+if (command !== 'serve' && command !== '--help' && command !== '-h' && command !== 'help') {
+  await preflight()
+}
 
 switch (command) {
   case 'login':
