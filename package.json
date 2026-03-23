@@ -1,6 +1,6 @@
 {
   "name": "cc2wx",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Claude Code ↔ WeChat bridge via MCP Channel protocol",
   "bin": {
     "cc2wx": "cli.mjs"
@@ -19,7 +19,7 @@
     "url": "git+https://github.com/roxorlt/cc2wx.git"
   },
   "scripts": {
-    "postinstall": "cd node_modules/@pinixai/weixin-bot && npm install --no-save @types/node && npx tsc --project tsconfig.json",
+    "postinstall": "node -e \"const p=require('path'),fs=require('fs');const d=[p.join(__dirname,'node_modules','@pinixai','weixin-bot'),p.join(__dirname,'..','@pinixai','weixin-bot')].find(x=>fs.existsSync(x));if(!d){console.log('weixin-bot not found, skipping postinstall');process.exit(0);}process.chdir(d);require('child_process').execSync('npm install --no-save @types/node && npx tsc --project tsconfig.json',{stdio:'inherit'})\"",
     "login": "node login.mjs",
     "start": "node start.mjs",
     "serve": "npx tsx cc2wx.ts"

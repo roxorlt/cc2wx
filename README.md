@@ -48,29 +48,34 @@ cc2wx 是一个 MCP Channel Server，通过微信 [iLink Bot API](https://github
 
 ## 快速开始
 
+### 方式一：npx 一键运行（推荐）
+
+```bash
+npx cc2wx login    # 首次：扫码登录 → 自动启动 Claude Code
+npx cc2wx start    # 后续：使用已保存凭证启动
+```
+
+### 方式二：从源码运行
+
 ```bash
 git clone https://github.com/roxorlt/cc2wx.git
 cd cc2wx
 npm install
+npm run login      # 首次登录
+npm start          # 后续启动
 ```
 
-### 首次登录
-
-```bash
-npm run login
-```
+### 登录流程
 
 终端会显示二维码，用微信扫码确认授权。登录成功后自动启动 Claude Code。
 
 凭证保存在 `~/.weixin-bot/credentials.json`，后续无需重复扫码。
 
-### 后续启动
+### 启动后
 
-```bash
-npm start
-```
+在手机微信里给自己的微信号发消息，Claude Code 会实时收到并回复。
 
-等价于：
+底层等价于：
 
 ```bash
 caffeinate -i claude \
@@ -78,8 +83,6 @@ caffeinate -i claude \
   --dangerously-skip-permissions \
   --effort max
 ```
-
-然后在手机微信里给自己的微信号发消息，Claude Code 会实时收到并回复。
 
 ## 安全须知
 
@@ -111,7 +114,17 @@ caffeinate -i claude \
 |------|------|
 | `CC2WX_ALLOWED_USERS` | 允许的微信 userId 白名单，逗号分隔。留空则接受所有消息（发现模式） |
 
-## npm scripts
+## 命令
+
+### npx 方式
+
+| 命令 | 说明 |
+|------|------|
+| `npx cc2wx login` | 扫码登录 → 保存凭证 → 自动启动 Claude Code |
+| `npx cc2wx start` | 使用已保存凭证启动 Claude Code（含防休眠） |
+| `npx cc2wx serve` | 单独运行 MCP server（调试用，不启动 Claude） |
+
+### 源码方式
 
 | 命令 | 说明 |
 |------|------|
@@ -180,9 +193,16 @@ sequenceDiagram
 ### Quick start
 
 ```bash
+npx cc2wx login   # first time: scan QR → auto-launches Claude Code
+npx cc2wx start   # subsequent runs (reuses saved credentials)
+```
+
+Or from source:
+
+```bash
 git clone https://github.com/roxorlt/cc2wx.git && cd cc2wx && npm install
 npm run login   # scan QR → auto-launches Claude Code
-npm start       # subsequent runs (reuses saved credentials)
+npm start       # subsequent runs
 ```
 
 ### Security warning
