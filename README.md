@@ -62,7 +62,7 @@ cc2wx 是一个 MCP Channel Server，通过微信 [iLink Bot API](https://github
 
 - **Node.js** >= 18
 - **Claude Code CLI** >= 2.1.81（需支持 Channels 和 Permission Relay）
-- **微信 ClawBot 灰度资格** — 打开微信 → 我 → 设置 → 插件，看是否有「爪爪机器人」。如果没有，说明你的微信号尚未被灰度到，暂时无法使用
+- **微信 ClawBot 灰度资格** — 打开微信 → 我 → 设置 → 插件，看是否有「微信 ClawBot」。如果没有，说明你的微信号尚未被灰度到，暂时无法使用
 - **macOS / Linux**（macOS 下自动使用 `caffeinate` 防休眠，Linux 直接运行）
 
 ## 快速开始
