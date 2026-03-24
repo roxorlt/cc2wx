@@ -268,7 +268,7 @@ const PermissionRequestSchema = z.object({
 server.setNotificationHandler(PermissionRequestSchema, async ({ params }) => {
   console.log(`[cc2wx] ✅ Permission request received! id=${params.request_id} tool=${params.tool_name}`)
 
-  // Auto-approve if tool matches an "always allow" pattern
+  // Auto-approve if tool matches an "always allow" pattern (silent, no WeChat notification)
   if (alwaysAllowPatterns.has(params.tool_name)) {
     console.log(`[cc2wx] Auto-approved ${params.tool_name} (always allow)`)
     try {
@@ -276,14 +276,6 @@ server.setNotificationHandler(PermissionRequestSchema, async ({ params }) => {
         method: 'notifications/claude/channel/permission',
         params: { request_id: params.request_id, behavior: 'allow' },
       })
-      // Notify user silently
-      const targetId = [...recentMessages.keys()].pop()
-      if (targetId) {
-        const cachedMsg = recentMessages.get(targetId)
-        const ack = `⚡ 自动批准 ${params.tool_name}`
-        if (cachedMsg) await bot.reply(cachedMsg, ack)
-        else await bot.send(targetId, ack)
-      }
     } catch (err) {
       console.error(`[cc2wx] Auto-approve failed: ${err instanceof Error ? err.message : String(err)}`)
     }
