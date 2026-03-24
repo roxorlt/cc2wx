@@ -201,7 +201,7 @@ CC2WX_ALLOWED_USERS=your_user_id npm start
 - **ClawBot 灰度** — 微信 ClawBot 功能尚在灰度测试中，不是所有微信号都能用
 - **Channels research preview** — Claude Code 的 Channel 功能也是实验性的
 - **单 context_token 回复上限** — iLink API 每条收到的消息最多回复约 10 条，超长回复可能丢失尾段
-- **仅文本** — 目前只支持文本消息，不支持图片/语音/文件
+- **图片/视频支持** — 图片和视频会自动下载到本地临时目录，Claude 可通过 Read 工具查看。语音/文件暂不支持
 - **macOS / Linux** — macOS 自动 `caffeinate` 防休眠，Linux 直接运行（Windows 未测试）
 
 ## 致谢

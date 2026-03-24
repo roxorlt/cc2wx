@@ -1,6 +1,6 @@
 {
   "name": "cc2wx",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Claude Code ↔ WeChat bridge via MCP Channel protocol",
   "bin": {
     "cc2wx": "cli.mjs"
