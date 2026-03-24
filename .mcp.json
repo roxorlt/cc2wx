@@ -3,6 +3,10 @@
     "cc2wx": {
       "command": "npx",
       "args": ["tsx", "cc2wx.ts"]
+    },
+    "cc2dt": {
+      "command": "npx",
+      "args": ["tsx", "cc2dt.ts"]
     }
   }
 }

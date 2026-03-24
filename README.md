@@ -46,6 +46,14 @@ sequenceDiagram
     Note over C: 长文本自动分段
     C->>API: sendmessage
     API-->>W: 微信收到回复
+
+    Note over W,CC: 权限确认 (Permission Relay)
+    CC->>C: permission_request 通知
+    C->>API: 转发权限提示到微信
+    API-->>W: 收到权限确认请求
+    W->>API: 回复 yes / always / no
+    C->>CC: permission verdict
+    Note over CC: 继续或中止操作
 ```
 
 cc2wx 是一个 MCP Channel Server，通过微信 [iLink Bot API](https://github.com/epiral/weixin-bot) 接收微信消息，再通过 Claude Code 的 [Channel 协议](https://code.claude.com/docs/en/channels) 实时推送给本地运行的 Claude Code 会话。Claude 的回复通过 `weixin_reply` 工具发回微信。
@@ -53,7 +61,7 @@ cc2wx 是一个 MCP Channel Server，通过微信 [iLink Bot API](https://github
 ## 前提条件
 
 - **Node.js** >= 18
-- **Claude Code CLI** >= 2.1.80（需支持 `--channels`）
+- **Claude Code CLI** >= 2.1.81（需支持 Channels 和 Permission Relay）
 - **微信 ClawBot 灰度资格** — 打开微信 → 我 → 设置 → 插件，看是否有「爪爪机器人」。如果没有，说明你的微信号尚未被灰度到，暂时无法使用
 - **macOS / Linux**（macOS 下自动使用 `caffeinate` 防休眠，Linux 直接运行）
 
@@ -91,39 +99,74 @@ npm start          # 后续启动
 ```bash
 caffeinate -i claude \
   --dangerously-load-development-channels server:cc2wx \
-  --dangerously-skip-permissions \
   --effort max
 ```
 
+## 权限确认（Permission Relay）
+
+cc2wx 支持 Claude Code 的 [Permission Relay](https://code.claude.com/docs/en/channels-reference) 协议。当 Claude 需要执行敏感操作时（如运行 Bash 命令、编辑文件），权限请求会转发到你的微信，你可以在手机上批准或拒绝。
+
+**无需 `--dangerously-skip-permissions`，所有权限确认通过微信完成。**
+
+微信收到的权限提示：
+
+```
+🔐 Claude 请求权限
+工具: Bash
+说明: List files in current directory
+
+ls -1 /Users/you/project/
+
+回复 yes 批准 / always 始终批准 / no 拒绝
+```
+
+| 回复 | 效果 |
+|------|------|
+| `yes` / `ok` / `好` / `y` | 批准本次操作 |
+| `always` / `始终` / `总是` | 批准并记住，同类工具后续自动批准 |
+| `no` / `不` / `拒绝` / `n` | 拒绝本次操作 |
+
+「始终批准」的工具列表保存在 `~/.cc2wx/always-allow.json`，重启后仍然有效。删除该文件即可重置。
+
 ## 安全须知
 
-### `--dangerously-skip-permissions`
+### Permission Relay vs `--dangerously-skip-permissions`
 
-此参数**跳过所有权限确认**，意味着 Claude Code 可以不经确认地执行任意 Bash 命令、编辑文件等。微信消息会作为 prompt 输入，理论上存在 prompt injection 风险。
+**推荐使用 Permission Relay**（默认行为）。通过微信逐一确认每个敏感操作，安全可控。
 
-**建议措施：**
+如果你确定只在可信环境中使用，也可以添加 `--dangerously-skip-permissions` 跳过所有权限确认。此参数**跳过所有权限确认**，意味着 Claude Code 可以不经确认地执行任意 Bash 命令、编辑文件等。微信消息会作为 prompt 输入，理论上存在 prompt injection 风险。
 
-1. **设置白名单** — 只允许你自己的微信 userId 触发 Claude：
+### userId 白名单
 
-   ```bash
-   CC2WX_ALLOWED_USERS=your_user_id npm start
-   ```
+设置白名单只允许你自己的微信 userId 触发 Claude：
 
-   首次运行不设白名单，发一条消息后在终端日志中找到 `from=xxx` 获取你的 userId。
+在 `.mcp.json` 中配置：
 
-2. **不要在生产环境或包含敏感数据的目录下运行**
+```json
+{
+  "mcpServers": {
+    "cc2wx": {
+      "command": "npx",
+      "args": ["tsx", "cc2wx.ts"],
+      "env": {
+        "CC2WX_ALLOWED_USERS": "your_user_id"
+      }
+    }
+  }
+}
+```
 
-3. 如果不想跳过权限，可以从 `npm start` 中去掉该参数，改为手动确认每个操作
+或通过环境变量：
+
+```bash
+CC2WX_ALLOWED_USERS=your_user_id npm start
+```
+
+首次运行不设白名单，发一条消息后在终端日志中找到 `from=xxx` 获取你的 userId。
 
 ### `caffeinate -i`
 
 `npm start` 和 `npm run login` 使用 `caffeinate -i` 阻止 macOS 空闲休眠（屏幕可以关闭），确保息屏后微信消息仍能送达。Claude Code 退出时 `caffeinate` 自动结束。
-
-## 环境变量
-
-| 变量 | 说明 |
-|------|------|
-| `CC2WX_ALLOWED_USERS` | 允许的微信 userId 白名单，逗号分隔。留空则接受所有消息（发现模式） |
 
 ## 命令
 
@@ -147,6 +190,8 @@ caffeinate -i claude \
 
 - 微信消息实时推送到 Claude Code 会话
 - 长回复自动分段发送（每段 ≤ 2000 字，按段落拆分）
+- 权限确认转发到微信（Permission Relay），无需 `--dangerously-skip-permissions`
+- 「始终批准」持久化，常用操作无需重复确认
 - 登录凭证本地持久化，无需重复扫码
 - 息屏防休眠，合盖也能保持通信
 - userId 白名单过滤
@@ -193,11 +238,17 @@ sequenceDiagram
     CC->>C: Call weixin_reply tool
     C->>API: sendmessage
     API-->>W: Reply delivered
+
+    Note over W,CC: Permission Relay
+    CC->>C: permission_request
+    C->>W: Forward prompt to WeChat
+    W->>C: Reply yes / always / no
+    C->>CC: permission verdict
 ```
 
 ### Prerequisites
 
-- Node.js >= 18, Claude Code CLI >= 2.1.80
+- Node.js >= 18, Claude Code CLI >= 2.1.81
 - WeChat with ClawBot plugin access (currently in grayscale rollout — not all accounts have it)
 - macOS or Linux (macOS auto-wraps with `caffeinate` to prevent idle sleep)
 
@@ -216,9 +267,15 @@ npm run login   # scan QR → auto-launches Claude Code
 npm start       # subsequent runs
 ```
 
-### Security warning
+### Permission Relay
 
-`npm start` uses `--dangerously-skip-permissions` which bypasses all Claude Code permission checks. WeChat messages become prompt input, creating potential prompt injection risk. Set `CC2WX_ALLOWED_USERS` to your WeChat userId and avoid running in directories with sensitive data.
+When Claude needs to run sensitive operations, approval prompts are forwarded to your WeChat. Reply `yes` to approve once, `always` to auto-approve that tool type going forward, or `no` to deny. No `--dangerously-skip-permissions` needed.
+
+The always-allow list is persisted at `~/.cc2wx/always-allow.json`. Delete it to reset.
+
+### Security
+
+Set `CC2WX_ALLOWED_USERS` to your WeChat userId (find it in startup logs) to restrict who can interact with Claude through your session.
 
 ### License
 

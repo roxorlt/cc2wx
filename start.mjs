@@ -10,7 +10,6 @@ import { spawn } from 'node:child_process'
 
 const claudeArgs = [
   '--dangerously-load-development-channels', 'server:cc2wx',
-  '--dangerously-skip-permissions',
   '--effort', 'max',
 ]
 

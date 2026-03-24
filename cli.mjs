@@ -124,7 +124,6 @@ function runStart() {
 
   const claudeArgs = [
     '--dangerously-load-development-channels', 'server:cc2wx',
-    '--dangerously-skip-permissions',
     '--effort', 'max',
   ]
 
