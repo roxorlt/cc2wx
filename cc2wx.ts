@@ -392,15 +392,22 @@ bot.onMessage(async (msg) => {
     recentMessages.delete(oldest)
   }
 
-  // Download media for non-text messages
+  // Handle non-text messages
   let mediaPath: string | null = null
   if (msg.type !== 'text' && (msg as any).raw?.item_list?.[0]) {
-    mediaPath = await downloadMedia((msg as any).raw.item_list[0])
+    // Voice: prefer transcribed text (ClawBot STT), skip audio download
+    if (msg.type === 'voice' && msg.text) {
+      console.log(`[cc2wx] Voice message with transcription, using text directly`)
+    } else {
+      mediaPath = await downloadMedia((msg as any).raw.item_list[0])
+    }
   }
 
   // Build content for channel notification
   let content: string
-  if (mediaPath) {
+  if (msg.type === 'voice' && msg.text) {
+    content = `[微信 ${msg.userId}] (语音转文字) ${msg.text}`
+  } else if (mediaPath) {
     content = `[微信 ${msg.userId}] (${msg.type} 已下载到 ${mediaPath})`
   } else if (msg.type !== 'text') {
     content = `[微信 ${msg.userId}] (${msg.type} 消息，下载失败，请发文字)`
