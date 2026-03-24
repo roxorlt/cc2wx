@@ -395,11 +395,15 @@ bot.onMessage(async (msg) => {
   // Handle non-text messages
   let mediaPath: string | null = null
   if (msg.type !== 'text' && (msg as any).raw?.item_list?.[0]) {
-    // Voice: prefer transcribed text (ClawBot STT), skip audio download entirely
-    // (Claude can't read audio files, so downloading is pointless)
+    // Voice: use ClawBot STT transcription, never download audio (Claude can't read it)
     if (msg.type === 'voice') {
-      if (msg.text) console.log(`[cc2wx] Voice with transcription, using text`)
-      else console.log(`[cc2wx] Voice without transcription, skipping`)
+      const voiceText = msg.text || (msg as any).raw?.item_list?.[0]?.voice_item?.text
+      if (voiceText) {
+        ;(msg as any)._voiceText = voiceText
+        console.log(`[cc2wx] Voice with transcription: ${voiceText.slice(0, 50)}`)
+      } else {
+        console.log(`[cc2wx] Voice without transcription, STT failed`)
+      }
     } else {
       mediaPath = await downloadMedia((msg as any).raw.item_list[0])
     }
@@ -407,8 +411,9 @@ bot.onMessage(async (msg) => {
 
   // Build content for channel notification
   let content: string
-  if (msg.type === 'voice' && msg.text) {
-    content = `[微信 ${msg.userId}] (语音转文字) ${msg.text}`
+  const voiceText = (msg as any)._voiceText || msg.text
+  if (msg.type === 'voice' && voiceText) {
+    content = `[微信 ${msg.userId}] (语音转文字) ${voiceText}`
   } else if (msg.type === 'voice') {
     content = `[微信 ${msg.userId}] (语音消息，无法识别，请发文字或文字转写)`
   } else if (mediaPath) {
