@@ -204,6 +204,32 @@ CC2WX_ALLOWED_USERS=your_user_id npm start
 - **图片/视频支持** — 图片和视频会自动下载到本地临时目录，Claude 可通过 Read 工具查看。语音/文件暂不支持
 - **macOS / Linux** — macOS 自动 `caffeinate` 防休眠，Linux 直接运行（Windows 未测试）
 
+## 更新日志
+
+### v1.2.0 (2026-03-24)
+
+- **图片/视频下载** — 微信发送的图片和视频自动下载到本地，Claude 可直接查看（通过 Read 工具多模态识别）
+- **媒体自动清理** — 启动时 + 每 6 小时清理超过 24 小时的临时文件
+
+### v1.1.0 (2026-03-24)
+
+- **Permission Relay** — 权限确认转发到微信，回复 yes/always/no，不再需要 `--dangerously-skip-permissions`
+- **Always Allow 持久化** — 常用工具「始终批准」后自动通过，列表保存在 `~/.cc2wx/always-allow.json`，重启不丢失
+- 移除默认启动参数中的 `--dangerously-skip-permissions`
+
+### v1.0.2 (2026-03-23)
+
+- 启动 banner 和 preflight 检查
+- 支持 `npx cc2wx` 一键运行
+
+### v1.0.0 (2026-03-23)
+
+- 首次发布
+- 微信消息实时桥接到 Claude Code
+- 长文本自动分段发送
+- 登录凭证持久化
+- macOS 防休眠
+
 ## 致谢
 
 - [weixin-ClawBot-API](https://github.com/SiverKing/weixin-ClawBot-API) — WeChat iLink Bot API 协议参考
