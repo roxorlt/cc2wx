@@ -7,6 +7,7 @@
   },
   "files": [
     "cli.mjs",
+    "launch.mjs",
     "login.mjs",
     "start.mjs",
     "cc2wx.ts",

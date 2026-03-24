@@ -8,59 +8,24 @@
  */
 
 import { mkdir, writeFile, chmod } from 'node:fs/promises'
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { spawn } from 'node:child_process'
 import os from 'node:os'
 import path from 'node:path'
 import qrterm from 'qrcode-terminal'
+import { launchClaude } from './launch.mjs'
 
 const BASE_URL = 'https://ilinkai.weixin.qq.com'
 const CRED_DIR = path.join(os.homedir(), '.weixin-bot')
 const CRED_PATH = path.join(CRED_DIR, 'credentials.json')
 const POLL_INTERVAL = 2000
 
-function ensureMcpJson() {
-  // 确保 cwd 下有 .mcp.json 指向本包的 cc2wx.ts
-  const pkgDir = path.dirname(new URL(import.meta.url).pathname)
-  const cc2wxTs = path.join(pkgDir, 'cc2wx.ts')
-  const mcpPath = path.join(process.cwd(), '.mcp.json')
-  const entry = { command: 'npx', args: ['tsx', cc2wxTs] }
-
-  if (existsSync(mcpPath)) {
-    try {
-      const existing = JSON.parse(readFileSync(mcpPath, 'utf8'))
-      existing.mcpServers = existing.mcpServers || {}
-      existing.mcpServers.cc2wx = entry
-      writeFileSync(mcpPath, JSON.stringify(existing, null, 2) + '\n')
-    } catch {
-      writeFileSync(mcpPath, JSON.stringify({ mcpServers: { cc2wx: entry } }, null, 2) + '\n')
-    }
-  } else {
-    writeFileSync(mcpPath, JSON.stringify({ mcpServers: { cc2wx: entry } }, null, 2) + '\n')
-  }
-}
-
-function launchClaude() {
-  console.log('\n正在启动 Claude Code...\n')
-  ensureMcpJson()
-  const claudeArgs = [
-    '--dangerously-load-development-channels', 'server:cc2wx',
-    '--dangerously-skip-permissions',
-    '--effort', 'max',
-  ]
-  // macOS: caffeinate -i 阻止空闲休眠；其他平台直接运行
-  const cmd = process.platform === 'darwin' ? 'caffeinate' : 'claude'
-  const args = process.platform === 'darwin' ? ['-i', 'claude', ...claudeArgs] : claudeArgs
-  const child = spawn(cmd, args, { stdio: 'inherit' })
-  child.on('exit', (code) => process.exit(code ?? 0))
-}
-
 // Step 1: Fetch QR code
 console.log('正在获取登录二维码...\n')
 
 let qrData
 try {
-  const qrResp = await fetch(`${BASE_URL}/ilink/bot/get_bot_qrcode?bot_type=3`)
+  const qrResp = await fetch(`${BASE_URL}/ilink/bot/get_bot_qrcode?bot_type=3`, {
+    signal: AbortSignal.timeout(15_000),
+  })
   qrData = await qrResp.json()
 } catch (err) {
   console.error(`无法连接 iLink 服务器: ${err.message}`)
@@ -120,6 +85,7 @@ while (true) {
     console.log(`  凭证已保存到 ${CRED_PATH}`)
 
     // 自动启动 Claude Code
+    console.log('\n正在启动 Claude Code...\n')
     launchClaude()
     break
   }

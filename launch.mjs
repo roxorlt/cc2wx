@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+
+/**
+ * Shared launch helpers for cc2wx CLI scripts.
+ * Single source of truth for Claude Code startup args and .mcp.json management.
+ */
+
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { spawn } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+import path from 'node:path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
+/**
+ * Ensure .mcp.json in cwd points to this package's cc2wx.ts
+ */
+export function ensureMcpJson() {
+  const cc2wxTs = path.join(__dirname, 'cc2wx.ts')
+  const mcpPath = path.join(process.cwd(), '.mcp.json')
+  const entry = { command: 'npx', args: ['tsx', cc2wxTs] }
+
+  if (existsSync(mcpPath)) {
+    try {
+      const existing = JSON.parse(readFileSync(mcpPath, 'utf8'))
+      const existingArgs = existing?.mcpServers?.cc2wx?.args
+      if (existingArgs && existingArgs.includes(cc2wxTs)) return
+      existing.mcpServers = existing.mcpServers || {}
+      existing.mcpServers.cc2wx = entry
+      writeFileSync(mcpPath, JSON.stringify(existing, null, 2) + '\n')
+      console.log(`[cc2wx] Updated .mcp.json -> ${cc2wxTs}`)
+    } catch {
+      writeFileSync(mcpPath, JSON.stringify({ mcpServers: { cc2wx: entry } }, null, 2) + '\n')
+      console.log(`[cc2wx] Created .mcp.json -> ${cc2wxTs}`)
+    }
+  } else {
+    writeFileSync(mcpPath, JSON.stringify({ mcpServers: { cc2wx: entry } }, null, 2) + '\n')
+    console.log(`[cc2wx] Created .mcp.json -> ${cc2wxTs}`)
+  }
+}
+
+/**
+ * Launch Claude Code with cc2wx channel, wrapped in caffeinate on macOS.
+ */
+export function launchClaude() {
+  ensureMcpJson()
+
+  const claudeArgs = [
+    '--dangerously-load-development-channels', 'server:cc2wx',
+    '--effort', 'max',
+  ]
+
+  const cmd = process.platform === 'darwin' ? 'caffeinate' : 'claude'
+  const args = process.platform === 'darwin' ? ['-i', 'claude', ...claudeArgs] : claudeArgs
+
+  const child = spawn(cmd, args, { stdio: 'inherit', cwd: process.cwd() })
+  child.on('exit', (code) => process.exit(code ?? 0))
+}
