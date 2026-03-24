@@ -21,13 +21,89 @@ import { z } from 'zod'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { createDecipheriv } from 'node:crypto'
 
 // --- Config ---
 const ALLOWED_USERS = process.env.CC2WX_ALLOWED_USERS
   ? process.env.CC2WX_ALLOWED_USERS.split(',').map(s => s.trim())
   : [] // empty = allow all (first-run discovery mode)
 
-// TODO: Media download not yet implemented — WeChat CDN requires undocumented iLink protocol
+// --- Media Download ---
+const MEDIA_DIR = '/tmp/cc2wx-media'
+const CDN_DOWNLOAD_URL = 'https://novac2c.cdn.weixin.qq.com/c2c/download'
+const MEDIA_MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+import { readdirSync, statSync, unlinkSync } from 'node:fs'
+
+function cleanupMedia() {
+  try {
+    if (!existsSync(MEDIA_DIR)) return
+    const now = Date.now()
+    let cleaned = 0
+    for (const file of readdirSync(MEDIA_DIR)) {
+      const filepath = join(MEDIA_DIR, file)
+      const age = now - statSync(filepath).mtimeMs
+      if (age > MEDIA_MAX_AGE_MS) {
+        unlinkSync(filepath)
+        cleaned++
+      }
+    }
+    if (cleaned > 0) console.log(`[cc2wx] Cleaned ${cleaned} expired media files`)
+  } catch (err) {
+    console.error(`[cc2wx] Media cleanup failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
+
+function parseAesKey(aesKeyB64: string): Buffer {
+  // Double-encoded: base64 → hex string (32 chars) → 16 byte raw key
+  const hexStr = Buffer.from(aesKeyB64, 'base64').toString('utf8')
+  return Buffer.from(hexStr, 'hex')
+}
+
+function detectExt(buf: Buffer): string {
+  if (buf[0] === 0xff && buf[1] === 0xd8) return 'jpg'
+  if (buf[0] === 0x89 && buf[1] === 0x50) return 'png'
+  if (buf[0] === 0x47 && buf[1] === 0x49) return 'gif'
+  if (buf[0] === 0x52 && buf[1] === 0x49) return 'webp'
+  return 'bin'
+}
+
+async function downloadMedia(item: any): Promise<string | null> {
+  const mediaItem = item?.image_item || item?.video_item || item?.file_item || item?.voice_item
+  if (!mediaItem?.media?.encrypt_query_param) return null
+
+  const { encrypt_query_param, aes_key } = mediaItem.media
+
+  try {
+    const cdnUrl = `${CDN_DOWNLOAD_URL}?encrypted_query_param=${encodeURIComponent(encrypt_query_param)}`
+    const resp = await fetch(cdnUrl, { method: 'GET' })
+
+    if (!resp.ok) {
+      console.log(`[cc2wx] CDN download failed: HTTP ${resp.status}`)
+      return null
+    }
+
+    let buffer = Buffer.from(await resp.arrayBuffer())
+
+    // Decrypt with AES-128-ECB if we have a key
+    if (aes_key) {
+      const key = parseAesKey(aes_key)
+      const decipher = createDecipheriv('aes-128-ecb', key, Buffer.alloc(0))
+      buffer = Buffer.concat([decipher.update(buffer), decipher.final()])
+    }
+
+    mkdirSync(MEDIA_DIR, { recursive: true })
+    const ext = detectExt(buffer)
+    const filename = `${Date.now()}.${ext}`
+    const filepath = join(MEDIA_DIR, filename)
+    writeFileSync(filepath, buffer)
+    console.log(`[cc2wx] Media saved: ${filepath} (${buffer.length} bytes, ${ext})`)
+    return filepath
+  } catch (err) {
+    console.error(`[cc2wx] Media download failed: ${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+}
 
 // Redirect bot's console output to stderr AND log file
 import { appendFileSync } from 'node:fs'
@@ -324,10 +400,18 @@ bot.onMessage(async (msg) => {
     recentMessages.delete(oldest)
   }
 
+  // Download media for non-text messages
+  let mediaPath: string | null = null
+  if (msg.type !== 'text' && (msg as any).raw?.item_list?.[0]) {
+    mediaPath = await downloadMedia((msg as any).raw.item_list[0])
+  }
+
   // Build content for channel notification
   let content: string
-  if (msg.type !== 'text') {
-    content = `[微信 ${msg.userId}] (${msg.type} 消息，暂不支持，请发文字)`
+  if (mediaPath) {
+    content = `[微信 ${msg.userId}] (${msg.type} 已下载到 ${mediaPath})`
+  } else if (msg.type !== 'text') {
+    content = `[微信 ${msg.userId}] (${msg.type} 消息，下载失败，请发文字)`
   } else {
     content = `[微信 ${msg.userId}] ${msg.text}`
   }
@@ -360,6 +444,9 @@ async function main() {
     console.error('[cc2wx] 请先运行: node login.mjs')
     process.exit(1)
   }
+
+  // Clean up expired media files from previous sessions
+  cleanupMedia()
 
   // Connect MCP stdio transport
   const transport = new StdioServerTransport()
