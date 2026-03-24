@@ -395,9 +395,11 @@ bot.onMessage(async (msg) => {
   // Handle non-text messages
   let mediaPath: string | null = null
   if (msg.type !== 'text' && (msg as any).raw?.item_list?.[0]) {
-    // Voice: prefer transcribed text (ClawBot STT), skip audio download
-    if (msg.type === 'voice' && msg.text) {
-      console.log(`[cc2wx] Voice message with transcription, using text directly`)
+    // Voice: prefer transcribed text (ClawBot STT), skip audio download entirely
+    // (Claude can't read audio files, so downloading is pointless)
+    if (msg.type === 'voice') {
+      if (msg.text) console.log(`[cc2wx] Voice with transcription, using text`)
+      else console.log(`[cc2wx] Voice without transcription, skipping`)
     } else {
       mediaPath = await downloadMedia((msg as any).raw.item_list[0])
     }
@@ -407,6 +409,8 @@ bot.onMessage(async (msg) => {
   let content: string
   if (msg.type === 'voice' && msg.text) {
     content = `[微信 ${msg.userId}] (语音转文字) ${msg.text}`
+  } else if (msg.type === 'voice') {
+    content = `[微信 ${msg.userId}] (语音消息，无法识别，请发文字或文字转写)`
   } else if (mediaPath) {
     content = `[微信 ${msg.userId}] (${msg.type} 已下载到 ${mediaPath})`
   } else if (msg.type !== 'text') {
