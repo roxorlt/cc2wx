@@ -142,8 +142,8 @@ const bot = new WeixinBot()
 const recentMessages = new Map() // userId -> IncomingMessage
 
 // Track pending permission request (latest one wins)
-let pendingPermissionId: string | null = null
-let pendingPermissionTool: string | null = null // tool name for "always" feature
+// Queue of pending permission requests (FIFO) — supports concurrent requests
+const pendingPermissions: Array<{ requestId: string; toolName: string }> = []
 
 // --- Always Allow: persistent low-risk action list ---
 const ALLOW_LIST_PATH = join(homedir(), '.cc2wx', 'always-allow.json')
@@ -300,9 +300,8 @@ server.setNotificationHandler(PermissionRequestSchema, async ({ params }) => {
     else preview = JSON.stringify(parsed, null, 2)
   } catch { /* keep original string */ }
 
-  // Store as pending so user can just reply "yes" / "ok" without the id
-  pendingPermissionId = params.request_id
-  pendingPermissionTool = params.tool_name
+  // Enqueue so user can reply in order (FIFO)
+  pendingPermissions.push({ requestId: params.request_id, toolName: params.tool_name })
 
   const prompt = [
     `🔐 Claude 请求权限`,
@@ -345,7 +344,7 @@ bot.onMessage(async (msg) => {
 
   // Intercept permission verdict replies
   // Supports: "yes", "ok", "y", "no", "n" (uses pending id) or "yes abc12" (explicit id)
-  if (msg.type === 'text' && msg.text && pendingPermissionId) {
+  if (msg.type === 'text' && msg.text && pendingPermissions.length > 0) {
     const SIMPLE_RE = /^\s*(y|yes|ok|好|批准|always|始终|总是|n|no|不|拒绝)\s*$/i
     const simpleMatch = msg.text.match(SIMPLE_RE)
     const explicitMatch = msg.text.match(PERMISSION_REPLY_RE)
@@ -355,35 +354,73 @@ bot.onMessage(async (msg) => {
       const reply = (explicitMatch ? match[1] : match[1]).trim().toLowerCase()
       const isAlways = /^(always|始终|总是)$/.test(reply)
       const isAllow = isAlways || /^(y|yes|ok|好|批准)$/i.test(reply)
-      const requestId = explicitMatch ? match[2].toLowerCase() : pendingPermissionId
 
-      // "always" → remember this tool pattern for auto-approve (persisted to disk)
-      if (isAlways && pendingPermissionTool) {
-        alwaysAllowPatterns.add(pendingPermissionTool)
-        saveAllowList(alwaysAllowPatterns)
-        console.log(`[cc2wx] Always allow added: ${pendingPermissionTool} (total: ${alwaysAllowPatterns.size})`)
+      // Explicit ID targets a specific request; simple reply targets the oldest (FIFO)
+      let pending: { requestId: string; toolName: string } | undefined
+      if (explicitMatch) {
+        const explicitId = match[2].toLowerCase()
+        const idx = pendingPermissions.findIndex(p => p.requestId === explicitId)
+        if (idx >= 0) pending = pendingPermissions.splice(idx, 1)[0]
+      } else {
+        pending = pendingPermissions.shift() // FIFO: consume the oldest
       }
 
-      pendingPermissionId = null // consumed
-      pendingPermissionTool = null
-      try {
-        await server.notification({
-          method: 'notifications/claude/channel/permission',
-          params: { request_id: requestId, behavior: isAllow ? 'allow' : 'deny' },
-        })
-        console.log(`[cc2wx] Permission verdict sent: ${requestId} → ${isAllow ? 'allow' : 'deny'}${isAlways ? ' (always)' : ''}`)
-        // Acknowledge to user
-        const cachedMsg = recentMessages.get(msg.userId)
-        let ack: string
-        if (isAlways) ack = `✅ 已批准，后续 ${[...alwaysAllowPatterns].pop()} 自动批准`
-        else if (isAllow) ack = `✅ 已批准`
-        else ack = `❌ 已拒绝`
-        if (cachedMsg) await bot.reply(cachedMsg, ack)
-        else await bot.send(msg.userId, ack)
-      } catch (err) {
-        console.error(`[cc2wx] Failed to send permission verdict: ${err instanceof Error ? err.message : String(err)}`)
+      if (!pending) {
+        // No matching request found — fall through to normal message handling
+      } else {
+        // "always" → remember this tool pattern for auto-approve (persisted to disk)
+        if (isAlways) {
+          alwaysAllowPatterns.add(pending.toolName)
+          saveAllowList(alwaysAllowPatterns)
+          console.log(`[cc2wx] Always allow added: ${pending.toolName} (total: ${alwaysAllowPatterns.size})`)
+        }
+
+        try {
+          await server.notification({
+            method: 'notifications/claude/channel/permission',
+            params: { request_id: pending.requestId, behavior: isAllow ? 'allow' : 'deny' },
+          })
+          console.log(`[cc2wx] Permission verdict sent: ${pending.requestId} → ${isAllow ? 'allow' : 'deny'}${isAlways ? ' (always)' : ''}`)
+          // Acknowledge to user
+          const cachedMsg = recentMessages.get(msg.userId)
+          let ack: string
+          if (isAlways) ack = `✅ 已批准，后续 ${pending.toolName} 自动批准`
+          else if (isAllow) ack = `✅ 已批准`
+          else ack = `❌ 已拒绝`
+          // If more pending, hint the user
+          if (pendingPermissions.length > 0) {
+            ack += `\n⏳ 还有 ${pendingPermissions.length} 个权限请求等待回复`
+          }
+          if (cachedMsg) await bot.reply(cachedMsg, ack)
+          else await bot.send(msg.userId, ack)
+        } catch (err) {
+          console.error(`[cc2wx] Failed to send permission verdict: ${err instanceof Error ? err.message : String(err)}`)
+        }
+
+        // If "always" was chosen, auto-approve remaining requests for the same tool
+        if (isAlways) {
+          const toAutoApprove = pendingPermissions.filter(p => p.toolName === pending!.toolName)
+          for (const p of toAutoApprove) {
+            try {
+              await server.notification({
+                method: 'notifications/claude/channel/permission',
+                params: { request_id: p.requestId, behavior: 'allow' },
+              })
+              console.log(`[cc2wx] Auto-approved queued ${p.toolName} (${p.requestId}) via always-allow`)
+            } catch (err) {
+              console.error(`[cc2wx] Failed to auto-approve queued: ${err instanceof Error ? err.message : String(err)}`)
+            }
+          }
+          // Remove auto-approved items from queue
+          const toolName = pending.toolName
+          let i = pendingPermissions.length
+          while (i--) {
+            if (pendingPermissions[i].toolName === toolName) pendingPermissions.splice(i, 1)
+          }
+        }
+
+        return // Don't forward verdict to Claude as a message
       }
-      return // Don't forward verdict to Claude as a message
     }
   }
   // Keep map small
