@@ -65,6 +65,15 @@ function detectExt(buf: Buffer): string {
   if (buf[0] === 0x89 && buf[1] === 0x50) return 'png'
   if (buf[0] === 0x47 && buf[1] === 0x49) return 'gif'
   if (buf[0] === 0x52 && buf[1] === 0x49) return 'webp'
+  // Video formats
+  if (buf.length >= 8 && buf.slice(4, 8).toString('ascii') === 'ftyp') return 'mp4'
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return 'webm'
+  // Document formats
+  if (buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46) return 'pdf'
+  if (buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04) return 'zip' // also docx/xlsx/pptx
+  // Audio formats
+  if (buf[0] === 0x23 && buf[1] === 0x21 && buf[2] === 0x41 && buf[3] === 0x4d) return 'amr'
+  if (buf.length >= 4 && buf.slice(0, 4).toString('ascii') === 'OggS') return 'ogg'
   return 'bin'
 }
 
@@ -76,7 +85,7 @@ async function downloadMedia(item: any): Promise<string | null> {
 
   try {
     const cdnUrl = `${CDN_DOWNLOAD_URL}?encrypted_query_param=${encodeURIComponent(encrypt_query_param)}`
-    const resp = await fetch(cdnUrl, { method: 'GET' })
+    const resp = await fetch(cdnUrl, { method: 'GET', signal: AbortSignal.timeout(30_000) })
 
     if (!resp.ok) {
       console.log(`[cc2wx] CDN download failed: HTTP ${resp.status}`)
@@ -163,8 +172,9 @@ function loadAllowList(): Set<string> {
 
 function saveAllowList(patterns: Set<string>) {
   try {
-    mkdirSync(join(homedir(), '.cc2wx'), { recursive: true })
-    writeFileSync(ALLOW_LIST_PATH, JSON.stringify([...patterns], null, 2) + '\n')
+    const dir = join(homedir(), '.cc2wx')
+    mkdirSync(dir, { recursive: true, mode: 0o700 })
+    writeFileSync(ALLOW_LIST_PATH, JSON.stringify([...patterns], null, 2) + '\n', { mode: 0o600 })
     console.log(`[cc2wx] Saved ${patterns.size} always-allow patterns to ${ALLOW_LIST_PATH}`)
   } catch (err) {
     console.error(`[cc2wx] Failed to save allow list: ${err instanceof Error ? err.message : String(err)}`)

@@ -10,11 +10,12 @@
  *   cc2wx --help  - Show usage
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
-import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { spawn, execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
+import { launchClaude } from './launch.mjs'
 
 // Resolve paths relative to THIS file (works whether cloned or npm-installed)
 const __filename = fileURLToPath(import.meta.url)
@@ -52,45 +53,6 @@ Environment variables:
 Credentials are stored in ~/.weixin-bot/credentials.json
 `.trim()
 
-// --- Ensure .mcp.json exists in cwd so Claude Code can find cc2wx ---
-function ensureMcpJson() {
-  const mcpPath = path.join(process.cwd(), '.mcp.json')
-  const cc2wxTs = path.join(PKG_DIR, 'cc2wx.ts')
-
-  // Desired config pointing to the package's cc2wx.ts
-  const desired = {
-    mcpServers: {
-      cc2wx: {
-        command: 'npx',
-        args: ['tsx', cc2wxTs],
-      },
-    },
-  }
-
-  if (existsSync(mcpPath)) {
-    try {
-      const existing = JSON.parse(readFileSync(mcpPath, 'utf8'))
-      // Check if cc2wx server is already configured with correct path
-      const existingArgs = existing?.mcpServers?.cc2wx?.args
-      if (existingArgs && existingArgs.includes(cc2wxTs)) {
-        return // already correct
-      }
-      // Merge: preserve other servers, update cc2wx entry
-      existing.mcpServers = existing.mcpServers || {}
-      existing.mcpServers.cc2wx = desired.mcpServers.cc2wx
-      writeFileSync(mcpPath, JSON.stringify(existing, null, 2) + '\n')
-      console.log(`[cc2wx] Updated .mcp.json -> ${cc2wxTs}`)
-    } catch {
-      // Malformed JSON, overwrite
-      writeFileSync(mcpPath, JSON.stringify(desired, null, 2) + '\n')
-      console.log(`[cc2wx] Created .mcp.json -> ${cc2wxTs}`)
-    }
-  } else {
-    writeFileSync(mcpPath, JSON.stringify(desired, null, 2) + '\n')
-    console.log(`[cc2wx] Created .mcp.json -> ${cc2wxTs}`)
-  }
-}
-
 function hasCredentials() {
   return existsSync(CRED_PATH)
 }
@@ -116,22 +78,11 @@ function runStart() {
     process.exit(1)
   }
 
-  ensureMcpJson()
-
   console.log(BANNER)
   console.log('  Send a message to your WeChat to talk to Claude.')
   console.log('  Press Ctrl+C to stop.\n')
 
-  const claudeArgs = [
-    '--dangerously-load-development-channels', 'server:cc2wx',
-    '--effort', 'max',
-  ]
-
-  const cmd = process.platform === 'darwin' ? 'caffeinate' : 'claude'
-  const args = process.platform === 'darwin' ? ['-i', 'claude', ...claudeArgs] : claudeArgs
-
-  const child = spawn(cmd, args, { stdio: 'inherit', cwd: process.cwd() })
-  child.on('exit', (code) => process.exit(code ?? 0))
+  launchClaude()
 }
 
 function runServe() {
@@ -146,7 +97,6 @@ function runServe() {
 }
 
 // --- Pre-flight checks ---
-import { execSync } from 'node:child_process'
 
 function preflight() {
   // Check Node version
