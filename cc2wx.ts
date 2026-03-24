@@ -445,8 +445,9 @@ async function main() {
     process.exit(1)
   }
 
-  // Clean up expired media files from previous sessions
+  // Clean up expired media files on startup + every 6 hours
   cleanupMedia()
+  setInterval(cleanupMedia, 6 * 60 * 60 * 1000)
 
   // Connect MCP stdio transport
   const transport = new StdioServerTransport()
