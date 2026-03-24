@@ -31,6 +31,28 @@ const ALLOWED_USERS = process.env.CC2WX_ALLOWED_USERS
 // --- Media Download ---
 const MEDIA_DIR = '/tmp/cc2wx-media'
 const CDN_DOWNLOAD_URL = 'https://novac2c.cdn.weixin.qq.com/c2c/download'
+const MEDIA_MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 hours
+
+import { readdirSync, statSync, unlinkSync } from 'node:fs'
+
+function cleanupMedia() {
+  try {
+    if (!existsSync(MEDIA_DIR)) return
+    const now = Date.now()
+    let cleaned = 0
+    for (const file of readdirSync(MEDIA_DIR)) {
+      const filepath = join(MEDIA_DIR, file)
+      const age = now - statSync(filepath).mtimeMs
+      if (age > MEDIA_MAX_AGE_MS) {
+        unlinkSync(filepath)
+        cleaned++
+      }
+    }
+    if (cleaned > 0) console.log(`[cc2wx] Cleaned ${cleaned} expired media files`)
+  } catch (err) {
+    console.error(`[cc2wx] Media cleanup failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+}
 
 function parseAesKey(aesKeyB64: string): Buffer {
   // Double-encoded: base64 → hex string (32 chars) → 16 byte raw key
@@ -422,6 +444,9 @@ async function main() {
     console.error('[cc2wx] 请先运行: node login.mjs')
     process.exit(1)
   }
+
+  // Clean up expired media files from previous sessions
+  cleanupMedia()
 
   // Connect MCP stdio transport
   const transport = new StdioServerTransport()
