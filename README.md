@@ -206,6 +206,10 @@ CC2WX_ALLOWED_USERS=your_user_id npm start
 
 ## 更新日志
 
+### v1.3.2 (2026-03-24)
+
+- 解决了一些bug
+
 ### v1.3.1 (2026-03-24)
 
 - 修复多条 permission 同时到达时的时序冲突问题
