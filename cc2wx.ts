@@ -20,7 +20,7 @@ import { WeixinBot } from '@pinixai/weixin-bot'
 import { z } from 'zod'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { homedir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { createDecipheriv } from 'node:crypto'
 
 // --- Config ---
@@ -29,7 +29,7 @@ const ALLOWED_USERS = process.env.CC2WX_ALLOWED_USERS
   : [] // empty = allow all (first-run discovery mode)
 
 // --- Media Download ---
-const MEDIA_DIR = '/tmp/cc2wx-media'
+const MEDIA_DIR = join(tmpdir(), 'cc2wx-media')
 const CDN_DOWNLOAD_URL = 'https://novac2c.cdn.weixin.qq.com/c2c/download'
 const MEDIA_MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 hours
 
@@ -116,7 +116,7 @@ async function downloadMedia(item: any): Promise<string | null> {
 
 // Redirect bot's console output to stderr AND log file
 import { appendFileSync } from 'node:fs'
-const LOG_FILE = '/tmp/cc2wx.log'
+const LOG_FILE = join(tmpdir(), 'cc2wx.log')
 function log(...args: unknown[]) {
   const line = `[${new Date().toISOString()}] ${args.join(' ')}\n`
   process.stderr.write(line)

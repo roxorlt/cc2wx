@@ -54,6 +54,10 @@ export function launchClaude() {
   const cmd = process.platform === 'darwin' ? 'caffeinate' : 'claude'
   const args = process.platform === 'darwin' ? ['-i', 'claude', ...claudeArgs] : claudeArgs
 
-  const child = spawn(cmd, args, { stdio: 'inherit', cwd: process.cwd() })
+  const child = spawn(cmd, args, {
+    stdio: 'inherit',
+    cwd: process.cwd(),
+    shell: process.platform === 'win32',
+  })
   child.on('exit', (code) => process.exit(code ?? 0))
 }

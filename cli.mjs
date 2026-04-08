@@ -92,6 +92,7 @@ function runServe() {
     stdio: 'inherit',
     cwd: process.cwd(),
     env: { ...process.env },
+    shell: process.platform === 'win32',
   })
   child.on('exit', (code) => process.exit(code ?? 0))
 }
