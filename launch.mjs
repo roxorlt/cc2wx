@@ -51,13 +51,28 @@ export function launchClaude() {
     '--effort', 'max',
   ]
 
-  const cmd = process.platform === 'darwin' ? 'caffeinate' : 'claude'
-  const args = process.platform === 'darwin' ? ['-i', 'claude', ...claudeArgs] : claudeArgs
+  const isWin = process.platform === 'win32'
+  let cmd, args, options
 
-  const child = spawn(cmd, args, {
-    stdio: 'inherit',
-    cwd: process.cwd(),
-    shell: process.platform === 'win32',
-  })
+  if (process.platform === 'darwin') {
+    cmd = 'caffeinate'
+    args = ['-i', 'claude', ...claudeArgs]
+    options = { stdio: 'inherit', cwd: process.cwd() }
+  } else if (isWin) {
+    // On Windows, --dangerously-load-development-channels activates --print mode,
+    // which requires an initial stdin line before Claude enters channel-listen mode.
+    // Piping "start" via cmd.exe provides that trigger so Claude stays alive
+    // waiting for MCP/WeChat notifications instead of exiting immediately.
+    const argStr = claudeArgs.map(a => (a.includes(' ') ? `"${a}"` : a)).join(' ')
+    cmd = 'cmd.exe'
+    args = ['/c', `echo start | claude ${argStr}`]
+    options = { stdio: 'inherit', cwd: process.cwd() }
+  } else {
+    cmd = 'claude'
+    args = claudeArgs
+    options = { stdio: 'inherit', cwd: process.cwd() }
+  }
+
+  const child = spawn(cmd, args, options)
   child.on('exit', (code) => process.exit(code ?? 0))
 }
