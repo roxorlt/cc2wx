@@ -23,7 +23,8 @@
     "postinstall": "node -e \"const p=require('path'),fs=require('fs');const d=[p.join(__dirname,'node_modules','@pinixai','weixin-bot'),p.join(__dirname,'..','@pinixai','weixin-bot')].find(x=>fs.existsSync(x));if(!d){console.log('weixin-bot not found, skipping postinstall');process.exit(0);}process.chdir(d);require('child_process').execSync('npm install --no-save @types/node && npx tsc --project tsconfig.json',{stdio:'inherit'})\"",
     "login": "node login.mjs",
     "start": "node start.mjs",
-    "serve": "npx tsx cc2wx.ts"
+    "serve": "npx tsx cc2wx.ts",
+    "postversion": "git push origin main --tags"
   },
   "keywords": [
     "claude-code",
