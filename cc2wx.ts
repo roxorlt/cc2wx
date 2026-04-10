@@ -212,7 +212,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  const { text, user_id } = request.params.arguments
+  const args = request.params.arguments ?? {}
+  const text = typeof args.text === 'string' ? args.text
+    : typeof args.content === 'string' ? args.content  // Claude occasionally sends 'content' instead of 'text'
+    : undefined
+  const rawUid = args.user_id ?? args.userId
+  const user_id = typeof rawUid === 'string' ? rawUid : undefined
+
+  if (!text) {
+    return {
+      content: [{ type: 'text', text: `参数错误: 缺少 text 字段 (收到的参数: ${JSON.stringify(Object.keys(args))})` }],
+      isError: true,
+    }
+  }
+
   const targetId = user_id || [...recentMessages.keys()].pop()
 
   if (!targetId) {
