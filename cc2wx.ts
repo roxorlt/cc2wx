@@ -92,6 +92,13 @@ async function downloadMedia(item: any): Promise<string | null> {
       return null
     }
 
+    // Reject oversized responses to prevent OOM (100MB limit)
+    const contentLength = parseInt(resp.headers.get('content-length') || '0', 10)
+    if (contentLength > 100 * 1024 * 1024) {
+      console.log(`[cc2wx] CDN response too large: ${contentLength} bytes, skipping`)
+      return null
+    }
+
     let buffer = Buffer.from(await resp.arrayBuffer())
 
     // Decrypt with AES-128-ECB if we have a key
@@ -103,7 +110,7 @@ async function downloadMedia(item: any): Promise<string | null> {
 
     mkdirSync(MEDIA_DIR, { recursive: true })
     const ext = detectExt(buffer)
-    const filename = `${Date.now()}.${ext}`
+    const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}.${ext}`
     const filepath = join(MEDIA_DIR, filename)
     writeFileSync(filepath, buffer)
     console.log(`[cc2wx] Media saved: ${filepath} (${buffer.length} bytes, ${ext})`)
@@ -114,13 +121,30 @@ async function downloadMedia(item: any): Promise<string | null> {
   }
 }
 
-// Redirect bot's console output to stderr AND log file
-import { appendFileSync } from 'node:fs'
+// Redirect bot's console output to stderr AND log file (with rotation)
+import { appendFileSync, renameSync } from 'node:fs'
 const LOG_FILE = join(tmpdir(), 'cc2wx.log')
+const LOG_MAX_BYTES = 10 * 1024 * 1024 // 10MB
+let logSizeEstimate = 0
+try { logSizeEstimate = statSync(LOG_FILE).size } catch {}
+
+function rotateLogIfNeeded() {
+  if (logSizeEstimate < LOG_MAX_BYTES) return
+  try {
+    // Keep one backup, overwrite older
+    renameSync(LOG_FILE, LOG_FILE + '.1')
+    logSizeEstimate = 0
+  } catch {}
+}
+
 function log(...args: unknown[]) {
   const line = `[${new Date().toISOString()}] ${args.join(' ')}\n`
   process.stderr.write(line)
-  try { appendFileSync(LOG_FILE, line) } catch {}
+  try {
+    appendFileSync(LOG_FILE, line)
+    logSizeEstimate += line.length
+    rotateLogIfNeeded()
+  } catch {}
 }
 console.log = log
 console.error = (...args: unknown[]) => log('[ERROR]', ...args)
@@ -149,10 +173,22 @@ const bot = new WeixinBot()
 
 // Track recent messages for reply context
 const recentMessages = new Map() // userId -> IncomingMessage
+let lastActiveUserId: string | undefined // most recent message sender
 
-// Track pending permission request (latest one wins)
-// Queue of pending permission requests (FIFO) — supports concurrent requests
-const pendingPermissions: Array<{ requestId: string; toolName: string }> = []
+// Queue of pending permission requests (FIFO) with TTL
+const PERMISSION_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const PERMISSION_MAX_PENDING = 20
+const pendingPermissions: Array<{ requestId: string; toolName: string; createdAt: number }> = []
+
+function sweepStalePermissions() {
+  const now = Date.now()
+  let swept = 0
+  while (pendingPermissions.length > 0 && now - pendingPermissions[0].createdAt > PERMISSION_TTL_MS) {
+    pendingPermissions.shift()
+    swept++
+  }
+  if (swept > 0) console.log(`[cc2wx] Swept ${swept} stale permission requests`)
+}
 
 // --- Always Allow: persistent low-risk action list ---
 const ALLOW_LIST_PATH = join(homedir(), '.cc2wx', 'always-allow.json')
@@ -226,7 +262,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
-  const targetId = user_id || [...recentMessages.keys()].pop()
+  const targetId = user_id || lastActiveUserId
 
   if (!targetId) {
     return {
@@ -306,7 +342,7 @@ server.setNotificationHandler(PermissionRequestSchema, async ({ params }) => {
   }
 
   // Find the most recent user to send the prompt to
-  const targetId = [...recentMessages.keys()].pop()
+  const targetId = lastActiveUserId
   if (!targetId) {
     console.log('[cc2wx] Permission request received but no active user to forward to')
     return
@@ -323,8 +359,19 @@ server.setNotificationHandler(PermissionRequestSchema, async ({ params }) => {
     else preview = JSON.stringify(parsed, null, 2)
   } catch { /* keep original string */ }
 
-  // Enqueue so user can reply in order (FIFO)
-  pendingPermissions.push({ requestId: params.request_id, toolName: params.tool_name })
+  // Sweep stale entries, then enqueue (FIFO)
+  sweepStalePermissions()
+  if (pendingPermissions.length >= PERMISSION_MAX_PENDING) {
+    console.log(`[cc2wx] Permission queue full (${PERMISSION_MAX_PENDING}), auto-denying oldest`)
+    const dropped = pendingPermissions.shift()!
+    try {
+      await server.notification({
+        method: 'notifications/claude/channel/permission',
+        params: { request_id: dropped.requestId, behavior: 'deny' },
+      })
+    } catch {}
+  }
+  pendingPermissions.push({ requestId: params.request_id, toolName: params.tool_name, createdAt: Date.now() })
 
   const prompt = [
     `🔐 Claude 请求权限`,
@@ -362,8 +409,9 @@ bot.onMessage(async (msg) => {
 
   console.log(`[cc2wx] 收到微信消息 from=${msg.userId} type=${msg.type}: ${msg.text?.slice(0, 100)}`)
 
-  // Cache for reply
+  // Cache for reply + track most recent active user
   recentMessages.set(msg.userId, msg)
+  lastActiveUserId = msg.userId
 
   // Intercept permission verdict replies
   // Supports: "yes", "ok", "y", "no", "n" (uses pending id) or "yes abc12" (explicit id)
