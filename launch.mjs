@@ -19,13 +19,19 @@ const __dirname = path.dirname(__filename)
 export function ensureMcpJson() {
   const cc2wxTs = path.join(__dirname, 'cc2wx.ts')
   const mcpPath = path.join(process.cwd(), '.mcp.json')
-  const entry = { command: 'npx', args: ['tsx', cc2wxTs] }
+  const isWin = process.platform === 'win32'
+  // Windows: Claude spawns MCP servers via spawn() without shell,
+  // so npx.cmd won't resolve. Wrap with cmd /c.
+  const entry = isWin
+    ? { command: 'cmd', args: ['/c', 'npx', 'tsx', cc2wxTs] }
+    : { command: 'npx', args: ['tsx', cc2wxTs] }
 
   if (existsSync(mcpPath)) {
     try {
       const existing = JSON.parse(readFileSync(mcpPath, 'utf8'))
-      const existingArgs = existing?.mcpServers?.cc2wx?.args
-      if (existingArgs && existingArgs.includes(cc2wxTs)) return
+      const existingEntry = existing?.mcpServers?.cc2wx
+      // Check both args AND command — stale command (e.g. 'npx' on Windows) must be corrected
+      if (existingEntry?.args?.includes(cc2wxTs) && existingEntry?.command === entry.command) return
       existing.mcpServers = existing.mcpServers || {}
       existing.mcpServers.cc2wx = entry
       writeFileSync(mcpPath, JSON.stringify(existing, null, 2) + '\n')
