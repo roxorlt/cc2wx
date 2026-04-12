@@ -28,7 +28,7 @@ try {
   })
   qrData = await qrResp.json()
 } catch (err) {
-  console.error(`无法连接 iLink 服务器: ${err.message}`)
+  console.error(`无法连接 iLink 服务器: ${err instanceof Error ? err.message : String(err)}`)
   console.error('请检查网络连接后重试')
   process.exit(1)
 }
@@ -41,15 +41,29 @@ console.log('请用微信扫一扫下方二维码:\n')
 qrterm.generate(qrUrl, { small: true })
 console.log(`\n(也可手动复制链接在微信内打开: ${qrUrl})\n`)
 
-// Step 2: Poll for scan status
+// Step 2: Poll for scan status (5 minute timeout)
 let lastStatus = ''
+const POLL_TIMEOUT_MS = 5 * 60 * 1000
+const pollStart = Date.now()
 
 while (true) {
-  const statusResp = await fetch(
-    `${BASE_URL}/ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(qrToken)}`,
-    { headers: { 'iLink-App-ClientVersion': '1' } },
-  )
-  const status = await statusResp.json()
+  if (Date.now() - pollStart > POLL_TIMEOUT_MS) {
+    console.error('等待扫码超时（5分钟），请重新运行: npx cc2wx login')
+    process.exit(1)
+  }
+
+  let status
+  try {
+    const statusResp = await fetch(
+      `${BASE_URL}/ilink/bot/get_qrcode_status?qrcode=${encodeURIComponent(qrToken)}`,
+      { headers: { 'iLink-App-ClientVersion': '1' }, signal: AbortSignal.timeout(10_000) },
+    )
+    status = await statusResp.json()
+  } catch (err) {
+    console.error(`轮询状态失败: ${err instanceof Error ? err.message : String(err)}，重试中...`)
+    await new Promise(r => setTimeout(r, POLL_INTERVAL))
+    continue
+  }
 
   if (status.status !== lastStatus) {
     if (status.status === 'scaned') {

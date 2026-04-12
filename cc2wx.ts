@@ -22,6 +22,9 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { createDecipheriv } from 'node:crypto'
+import { createRequire } from 'node:module'
+const require = createRequire(import.meta.url)
+const { version: PKG_VERSION } = require('./package.json')
 
 // --- Config ---
 const ALLOWED_USERS = process.env.CC2WX_ALLOWED_USERS
@@ -33,18 +36,18 @@ const MEDIA_DIR = join(tmpdir(), 'cc2wx-media')
 const CDN_DOWNLOAD_URL = 'https://novac2c.cdn.weixin.qq.com/c2c/download'
 const MEDIA_MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 hours
 
-import { readdirSync, statSync, unlinkSync } from 'node:fs'
+import { readdir, stat, unlink } from 'node:fs/promises'
 
-function cleanupMedia() {
+async function cleanupMedia() {
   try {
     if (!existsSync(MEDIA_DIR)) return
     const now = Date.now()
     let cleaned = 0
-    for (const file of readdirSync(MEDIA_DIR)) {
+    for (const file of await readdir(MEDIA_DIR)) {
       const filepath = join(MEDIA_DIR, file)
-      const age = now - statSync(filepath).mtimeMs
+      const age = now - (await stat(filepath)).mtimeMs
       if (age > MEDIA_MAX_AGE_MS) {
-        unlinkSync(filepath)
+        await unlink(filepath)
         cleaned++
       }
     }
@@ -151,7 +154,7 @@ console.error = (...args: unknown[]) => log('[ERROR]', ...args)
 
 // --- MCP Server ---
 const server = new Server(
-  { name: 'cc2wx', version: '1.0.0' },
+  { name: 'cc2wx', version: PKG_VERSION },
   {
     capabilities: {
       tools: {},
