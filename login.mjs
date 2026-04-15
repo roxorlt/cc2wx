@@ -12,6 +12,7 @@ import os from 'node:os'
 import path from 'node:path'
 import qrterm from 'qrcode-terminal'
 import { launchClaude } from './launch.mjs'
+import { restrictToCurrentUser } from './fs-acl.mjs'
 
 const BASE_URL = 'https://ilinkai.weixin.qq.com'
 const CRED_DIR = path.join(os.homedir(), '.weixin-bot')
@@ -90,8 +91,10 @@ while (true) {
 
     // Save credentials
     await mkdir(CRED_DIR, { recursive: true, mode: 0o700 })
+    restrictToCurrentUser(CRED_DIR)
     await writeFile(CRED_PATH, JSON.stringify(credentials, null, 2) + '\n', { mode: 0o600 })
     await chmod(CRED_PATH, 0o600)
+    restrictToCurrentUser(CRED_PATH)
 
     console.log(`\n登录成功!`)
     console.log(`  accountId: ${credentials.accountId}`)

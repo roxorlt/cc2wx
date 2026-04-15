@@ -37,6 +37,7 @@ const CDN_DOWNLOAD_URL = 'https://novac2c.cdn.weixin.qq.com/c2c/download'
 const MEDIA_MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 import { readdir, stat, unlink } from 'node:fs/promises'
+import { restrictToCurrentUser } from './fs-acl.mjs'
 
 async function cleanupMedia() {
   try {
@@ -213,7 +214,9 @@ function saveAllowList(patterns: Set<string>) {
   try {
     const dir = join(homedir(), '.cc2wx')
     mkdirSync(dir, { recursive: true, mode: 0o700 })
+    restrictToCurrentUser(dir)
     writeFileSync(ALLOW_LIST_PATH, JSON.stringify([...patterns], null, 2) + '\n', { mode: 0o600 })
+    restrictToCurrentUser(ALLOW_LIST_PATH)
     console.log(`[cc2wx] Saved ${patterns.size} always-allow patterns to ${ALLOW_LIST_PATH}`)
   } catch (err) {
     console.error(`[cc2wx] Failed to save allow list: ${err instanceof Error ? err.message : String(err)}`)
