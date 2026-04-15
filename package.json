@@ -7,6 +7,7 @@
   },
   "files": [
     "cli.mjs",
+    "fs-acl.mjs",
     "launch.mjs",
     "login.mjs",
     "start.mjs",
